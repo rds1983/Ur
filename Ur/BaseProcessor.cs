@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Collections.Generic;
 using System.IO;
 using ClangSharp;
 
@@ -7,40 +7,81 @@ namespace Ur
 	public abstract class BaseProcessor
 	{
 		protected readonly CXTranslationUnit _translationUnit;
-		protected readonly TextWriter _writer;
-		protected int _indentLevel = 2;
+		protected int _indentLevel = 0;
 
-		protected BaseProcessor(CXTranslationUnit translationUnit, TextWriter writer)
+		protected abstract TextWriter Writer { get; }
+		public abstract Dictionary<string, StringWriter> Outputs { get; }
+
+		protected BaseProcessor(CXTranslationUnit translationUnit)
 		{
-			if (writer == null)
-			{
-				throw new ArgumentNullException("writer");
-			}
-
 			_translationUnit = translationUnit;
-			_writer = writer;
 		}
 
 		public abstract void Run();
 
-		protected void WriteIndent()
+		public void WriteIndent()
 		{
+			if (Writer == null)
+			{
+				return;
+			}
+
 			for (var i = 0; i < _indentLevel; ++i)
 			{
-				_writer.Write("\t");
+				Writer.Write("\t");
 			}
 		}
 
-		protected void IndentedWriteLine(string line)
+		public void IndentedWriteLine(string line)
 		{
+			if (Writer == null)
+			{
+				return;
+			}
+
 			WriteIndent();
-			_writer.WriteLine(line);
+			Writer.WriteLine(line);
 		}
 
-		protected void IndentedWrite(string data)
+		public void IndentedWrite(string data)
 		{
+			if (Writer == null)
+			{
+				return;
+			}
+
 			WriteIndent();
-			_writer.Write(data);
+			Writer.Write(data);
+		}
+
+		public void WriteLine()
+		{
+			if (Writer == null)
+			{
+				return;
+			}
+
+			Writer.WriteLine();
+		}
+
+		public void WriteLine(string s)
+		{
+			if (Writer == null)
+			{
+				return;
+			}
+
+			Writer.WriteLine(s);
+		}
+
+		public void Write(string s)
+		{
+			if (Writer == null)
+			{
+				return;
+			}
+
+			Writer.Write(s);
 		}
 	}
 }

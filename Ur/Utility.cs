@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -9,19 +10,27 @@ using SealangSharp;
 
 namespace Ur
 {
-	public enum RecordType
-	{
-		None,
-		Struct,
-		Class
-	}
-
 	public static class Utility
 	{
-		public static HashSet<string> Classes = new HashSet<string>();
+		public static Func<string, string> TypeNameReplacer { get; set; } 
 
 		private static readonly Stack<Func<CXCursor, CXChildVisitResult>> _visitorActionStack =
 			new Stack<Func<CXCursor, CXChildVisitResult>>();
+
+		private static readonly HashSet<string> _specialWords = new HashSet<string>(new[]
+		{
+			"out", "in", "base", "null", "string"
+		});
+
+		public static string FixSpecialWords(this string name)
+		{
+			if (_specialWords.Contains(name))
+			{
+				name = "_" + name + "_";
+			}
+
+			return name;
+		}
 
 		public static bool IsInSystemHeader(this CXCursor cursor)
 		{
@@ -62,13 +71,13 @@ namespace Ur
 				case CXTypeKind.CXType_Short:
 					return "short";
 				case CXTypeKind.CXType_Float:
-					return "float";
+					return "f32";
 				case CXTypeKind.CXType_Double:
 					return "double";
 				case CXTypeKind.CXType_Int:
-					return "int";
+					return "i32";
 				case CXTypeKind.CXType_UInt:
-					return "uint";
+					return "u32";
 				case CXTypeKind.CXType_Pointer:
 				case CXTypeKind.CXType_NullPtr: // ugh, what else can I do?
 					return "IntPtr";
@@ -116,18 +125,14 @@ namespace Ur
 
 			sb.Append(ToCSharpTypeString(type, treatArrayAsPointer));
 
-			RecordType recordType;
 			string recordName;
-			type.ResolveRecord(out recordType, out recordName);
-			if (recordType != RecordType.Class)
-			{
-				sb.Append("*");
-			}
+			type.ResolveRecord(out recordName);
+			sb.Append("*");
 
 			return sb.ToString();
 		}
 
-		public static string ToCSharpTypeString(this CXType type, bool treatArrayAsPointer = false)
+		public static string ToCSharpTypeString(this CXType type, bool treatArrayAsPointer = false, bool replace = true)
 		{
 			var isConstQualifiedType = clang.isConstQualifiedType(type) != 0;
 			var spelling = string.Empty;
@@ -138,9 +143,6 @@ namespace Ur
 			{
 				case CXTypeKind.CXType_Record:
 					spelling = clang.getTypeSpelling(type).ToString();
-					break;
-				case CXTypeKind.CXType_Enum:
-					spelling = "int";
 					break;
 				case CXTypeKind.CXType_IncompleteArray:
 					sb.Append(clang.getArrayElementType(type).ToCSharpTypeString());
@@ -161,7 +163,7 @@ namespace Ur
 					}
 					else
 					{
-						sb.Append("PinnedArray<" + t.ToCSharpTypeString() + ">");
+						sb.Append(t.ToCSharpTypeString() + "[]");
 					}
 					break;
 				case CXTypeKind.CXType_Pointer:
@@ -169,10 +171,6 @@ namespace Ur
 					break;
 				default:
 					spelling = clang.getCanonicalType(type).ToPlainTypeString();
-					if (spelling.StartsWith("enum "))
-					{
-						spelling = "int";
-					}
 					break;
 			}
 
@@ -183,13 +181,22 @@ namespace Ur
 
 			spelling = spelling.Replace("struct ", string.Empty);
 
+			if (spelling.StartsWith("enum "))
+			{
+				spelling = "int";
+			}
+
+			if (replace && TypeNameReplacer != null)
+			{
+				spelling = TypeNameReplacer(spelling);
+			}
+
 			sb.Append(spelling);
 			return sb.ToString();
 		}
 
-		public static void ResolveRecord(this CXType type, out RecordType recordType, out string name)
+		public static void ResolveRecord(this CXType type, out string name)
 		{
-			recordType = RecordType.None;
 			name = string.Empty;
 			var run = true;
 			var determine = false;
@@ -230,7 +237,11 @@ namespace Ur
 				}
 
 				name = name.Replace("struct ", string.Empty);
-				recordType = Classes.Contains(name) ? RecordType.Class : RecordType.Struct;
+			}
+
+			if (TypeNameReplacer != null)
+			{
+				name = TypeNameReplacer(name);
 			}
 		}
 
@@ -253,41 +264,6 @@ namespace Ur
 
 				return type;
 			}
-		}
-
-		public static string FixSpecialWords(this string name)
-		{
-			if (name == "out")
-			{
-				name = "_out_";
-			}
-
-			if (name == "in")
-			{
-				name = "_in_";
-			}
-
-			if (name == "base")
-			{
-				name = "_base_";
-			}
-
-			if (name == "next")
-			{
-				name = "_next_";
-			}
-
-			if (name == "null")
-			{
-				name = "_null_";
-			}
-
-			if (name == "string")
-			{
-				name = "_string_";
-			}
-
-			return name;
 		}
 
 		private static CXChildVisitResult ActionVisitor(CXCursor cursor, CXCursor parent, IntPtr data)
@@ -487,24 +463,6 @@ namespace Ur
 			return type.kind.IsPointer();
 		}
 
-		public static bool IsStruct(this CXType type)
-		{
-			RecordType rt;
-			string name;
-			ResolveRecord(type, out rt, out name);
-
-			return rt == RecordType.Struct;
-		}
-
-		public static bool IsClass(this CXType type)
-		{
-			RecordType rt;
-			string name;
-			ResolveRecord(type, out rt, out name);
-
-			return rt == RecordType.Class;
-		}
-
 		public static bool IsArray(this CXType type)
 		{
 			return type.kind == CXTypeKind.CXType_ConstantArray ||
@@ -594,7 +552,7 @@ namespace Ur
 			// Remove white space
 			expr = Regex.Replace(expr, @"\s+", "");
 
-			while(expr.CorrectlyParentized())
+			while (expr.CorrectlyParentized())
 			{
 				expr = expr.Substring(1, expr.Length - 2);
 			}
@@ -632,6 +590,25 @@ namespace Ur
 			return type.Parentize() + expr.Parentize();
 		}
 
+		public static string RemoveCasts(this string expr)
+		{
+			while (expr.StartsWith("("))
+			{
+				expr = expr.Deparentize();
+				var m = Regex.Match(expr, @"^\((\w+)\)(\(.+\))$");
+				if (m.Success)
+				{
+					expr = m.Groups[2].Value;
+				}
+				else
+				{
+					break;
+				}
+			}
+
+			return expr;
+		}
+
 		public static string Curlize(this string expr)
 		{
 			expr = expr.Trim();
@@ -644,22 +621,57 @@ namespace Ur
 			return "{" + expr + "}";
 		}
 
-		public static int ParseNumber(this string num)
+		public static bool TryParseNumber(this string num, out int i)
 		{
+			var result = false;
+			i = 0;
 			try
 			{
 				if (num.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
 				{
 					num = num.Substring(2);
-					return int.Parse(num, NumberStyles.HexNumber);
+					i = int.Parse(num, NumberStyles.HexNumber);
+				}
+				else
+				{
+					i = int.Parse(num);
 				}
 
-				return int.Parse(num);
+				result = true;
 			}
 			catch (Exception ex)
 			{
-				return 0;
 			}
+
+			return result;
+		}
+
+		public static string ReplaceNativeCalls(string data)
+		{
+			// Build hash of C functions
+			var type = typeof (CRuntime);
+			var methods = new HashSet<string>();
+			foreach (var f in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
+			{
+				methods.Add(f.Name);
+			}
+
+			var name = type.Name;
+			foreach (var m in methods)
+			{
+				data = data.Replace("(" + m + "(", "(" + name + "." + m + "(");
+				data = data.Replace(" " + m + "(", " " + name + "." + m + "(");
+				data = data.Replace(";" + m + "(", ";" + name + "." + m + "(");
+				data = data.Replace(":" + m + "(", ":" + name + "." + m + "(");
+				data = data.Replace("\t" + m + "(", "\t" + name + "." + m + "(");
+				data = data.Replace("\n" + m + "(", "\n" + name + "." + m + "(");
+				data = data.Replace("-" + m + "(", "-" + name + "." + m + "(");
+				data = data.Replace("{" + m + "(", "{" + name + "." + m + "(");
+				data = data.Replace("}" + m + "(", "}" + name + "." + m + "(");
+				data = data.Replace("?" + m + "(", "?" + name + "." + m + "(");
+			}
+
+			return data;
 		}
 	}
 }

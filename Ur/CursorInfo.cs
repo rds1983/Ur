@@ -2,13 +2,12 @@
 
 namespace Ur
 {
-	internal class CursorInfo
+	public class CursorInfo
 	{
 		private readonly CXCursor _cursor;
 		private readonly CXCursorKind _kind;
 		private readonly CXType _type;
 		private readonly string _spelling;
-		private readonly RecordType _recordType;
 		private readonly string _recordName;
 
 		public CXCursor Cursor
@@ -31,12 +30,7 @@ namespace Ur
 			get { return _spelling; }
 		}
 
-		public string CsType { get; set; }
-
-		public RecordType RecordType
-		{
-			get { return _recordType; }
-		}
+		public string RustType { get; set; }
 
 		public string RecordName
 		{
@@ -64,9 +58,9 @@ namespace Ur
 			_kind = clang.getCursorKind(cursor);
 			_type = clang.getCursorType(cursor).Desugar();
 			_spelling = clang.getCursorSpelling(cursor).ToString();
-			CsType = _type.ToCSharpTypeString();
+			RustType = _type.ToCSharpTypeString();
 			
-			_type.ResolveRecord(out _recordType, out _recordName);
+			_type.ResolveRecord(out _recordName);
 		}
 	}
 }
