@@ -12,14 +12,14 @@ namespace Ur
 {
 	public static class Utility
 	{
-		public static Func<string, string> TypeNameReplacer { get; set; } 
+		public static Func<string, string> TypeNameReplacer { get; set; }
 
 		private static readonly Stack<Func<CXCursor, CXChildVisitResult>> _visitorActionStack =
 			new Stack<Func<CXCursor, CXChildVisitResult>>();
 
 		private static readonly HashSet<string> _specialWords = new HashSet<string>(new[]
 		{
-			"out", "in", "base", "null", "string"
+			"out", "in", "base", "null", "string", "type"
 		});
 
 		public static string FixSpecialWords(this string name)
@@ -62,10 +62,10 @@ namespace Ur
 					return "bool";
 				case CXTypeKind.CXType_UChar:
 				case CXTypeKind.CXType_Char_U:
-					return "byte";
+					return "u8";
 				case CXTypeKind.CXType_SChar:
 				case CXTypeKind.CXType_Char_S:
-					return "sbyte";
+					return "i8";
 				case CXTypeKind.CXType_UShort:
 					return "ushort";
 				case CXTypeKind.CXType_Short:
@@ -112,27 +112,24 @@ namespace Ur
 			return type;
 		}
 
-		private static string ProcessPointerType(this CXType type, bool treatArrayAsPointer)
+		private static string ProcessPointerType(this CXType type)
 		{
 			type = type.Desugar();
 
 			if (type.kind == CXTypeKind.CXType_Void)
 			{
-				return "void *";
+				return "*mut u8";
 			}
 
 			var sb = new StringBuilder();
 
-			sb.Append(ToCSharpTypeString(type, treatArrayAsPointer));
-
-			string recordName;
-			type.ResolveRecord(out recordName);
-			sb.Append("*");
+			sb.Append("*mut ");
+			sb.Append(ToCSharpTypeString(type));
 
 			return sb.ToString();
 		}
 
-		public static string ToCSharpTypeString(this CXType type, bool treatArrayAsPointer = false, bool replace = true)
+		public static string ToCSharpTypeString(this CXType type, bool replace = true)
 		{
 			var isConstQualifiedType = clang.isConstQualifiedType(type) != 0;
 			var spelling = string.Empty;
@@ -157,17 +154,10 @@ namespace Ur
 					break;
 				case CXTypeKind.CXType_ConstantArray:
 					var t = clang.getArrayElementType(type);
-					if (treatArrayAsPointer)
-					{
-						sb.Append(ProcessPointerType(t, true));
-					}
-					else
-					{
-						sb.Append(t.ToCSharpTypeString() + "[]");
-					}
+					sb.Append("[" + t.ToCSharpTypeString() + ";" + type.GetArraySize() + "]");
 					break;
 				case CXTypeKind.CXType_Pointer:
-					sb.Append(ProcessPointerType(clang.getPointeeType(type), treatArrayAsPointer));
+					sb.Append(ProcessPointerType(clang.getPointeeType(type)));
 					break;
 				default:
 					spelling = clang.getCanonicalType(type).ToPlainTypeString();
@@ -207,11 +197,11 @@ namespace Ur
 				switch (type.kind)
 				{
 					case CXTypeKind.CXType_Record:
-					{
-						determine = true;
-						run = false;
-						break;
-					}
+						{
+							determine = true;
+							run = false;
+							break;
+						}
 
 					case CXTypeKind.CXType_IncompleteArray:
 					case CXTypeKind.CXType_ConstantArray:
@@ -309,8 +299,8 @@ namespace Ur
 			var tokens = new CXToken[numTokens];
 			for (uint i = 0; i < numTokens; ++i)
 			{
-				tokens[i] = (CXToken) Marshal.PtrToStructure(nativeTokens, typeof (CXToken));
-				nativeTokens += Marshal.SizeOf(typeof (CXToken));
+				tokens[i] = (CXToken)Marshal.PtrToStructure(nativeTokens, typeof(CXToken));
+				nativeTokens += Marshal.SizeOf(typeof(CXToken));
 
 				var name = clang.getTokenSpelling(translationUnit, tokens[i]).ToString();
 				result.Add(name);
@@ -400,27 +390,27 @@ namespace Ur
 		public static bool IsLogicalBooleanOperator(this BinaryOperatorKind op)
 		{
 			return op == BinaryOperatorKind.LAnd || op == BinaryOperatorKind.LOr ||
-			       op == BinaryOperatorKind.EQ || op == BinaryOperatorKind.GE ||
-			       op == BinaryOperatorKind.GT || op == BinaryOperatorKind.LT;
+				   op == BinaryOperatorKind.EQ || op == BinaryOperatorKind.GE ||
+				   op == BinaryOperatorKind.GT || op == BinaryOperatorKind.LT;
 		}
 
 		public static bool IsBooleanOperator(this BinaryOperatorKind op)
 		{
 			return op == BinaryOperatorKind.LAnd || op == BinaryOperatorKind.LOr ||
-			       op == BinaryOperatorKind.EQ || op == BinaryOperatorKind.NE ||
-			       op == BinaryOperatorKind.GE || op == BinaryOperatorKind.LE ||
-			       op == BinaryOperatorKind.GT || op == BinaryOperatorKind.LT ||
-			       op == BinaryOperatorKind.And || op == BinaryOperatorKind.Or;
+				   op == BinaryOperatorKind.EQ || op == BinaryOperatorKind.NE ||
+				   op == BinaryOperatorKind.GE || op == BinaryOperatorKind.LE ||
+				   op == BinaryOperatorKind.GT || op == BinaryOperatorKind.LT ||
+				   op == BinaryOperatorKind.And || op == BinaryOperatorKind.Or;
 		}
 
 		public static bool IsAssign(this BinaryOperatorKind op)
 		{
 			return op == BinaryOperatorKind.AddAssign || op == BinaryOperatorKind.AndAssign ||
-			       op == BinaryOperatorKind.Assign || op == BinaryOperatorKind.DivAssign ||
-			       op == BinaryOperatorKind.MulAssign || op == BinaryOperatorKind.OrAssign ||
-			       op == BinaryOperatorKind.RemAssign || op == BinaryOperatorKind.ShlAssign ||
-			       op == BinaryOperatorKind.ShrAssign || op == BinaryOperatorKind.SubAssign ||
-			       op == BinaryOperatorKind.XorAssign;
+				   op == BinaryOperatorKind.Assign || op == BinaryOperatorKind.DivAssign ||
+				   op == BinaryOperatorKind.MulAssign || op == BinaryOperatorKind.OrAssign ||
+				   op == BinaryOperatorKind.RemAssign || op == BinaryOperatorKind.ShlAssign ||
+				   op == BinaryOperatorKind.ShrAssign || op == BinaryOperatorKind.SubAssign ||
+				   op == BinaryOperatorKind.XorAssign;
 		}
 
 		internal static string GetExpression(this CursorProcessResult cursorProcessResult)
@@ -466,8 +456,8 @@ namespace Ur
 		public static bool IsArray(this CXType type)
 		{
 			return type.kind == CXTypeKind.CXType_ConstantArray ||
-			       type.kind == CXTypeKind.CXType_DependentSizedArray ||
-			       type.kind == CXTypeKind.CXType_VariableArray;
+				   type.kind == CXTypeKind.CXType_DependentSizedArray ||
+				   type.kind == CXTypeKind.CXType_VariableArray;
 		}
 
 		public static long GetArraySize(this CXType type)
@@ -587,6 +577,8 @@ namespace Ur
 				return expr;
 			}
 
+			type = type.Replace("mut ", "");
+
 			return type.Parentize() + expr.Parentize();
 		}
 
@@ -649,7 +641,7 @@ namespace Ur
 		public static string ReplaceNativeCalls(string data)
 		{
 			// Build hash of C functions
-			var type = typeof (CRuntime);
+			var type = typeof(CRuntime);
 			var methods = new HashSet<string>();
 			foreach (var f in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
 			{

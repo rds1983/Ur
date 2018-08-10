@@ -8,7 +8,7 @@ namespace Ur
 {
 	public class DumpProcessor : BaseProcessor
 	{
-		private string _currentSource;
+		private string _currentSource = @"..\..\..\..\..\src\stb_image.rs";
 		private readonly Dictionary<string, StringWriter> _writers = new Dictionary<string, StringWriter>();
 
 		public override Dictionary<string, StringWriter> Outputs
@@ -28,6 +28,7 @@ namespace Ur
 				StringWriter sw;
 				if (!_writers.TryGetValue(_currentSource, out sw))
 				{
+					sw = new StringWriter();
 					_writers[_currentSource] = sw;
 				}
 

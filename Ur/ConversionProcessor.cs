@@ -36,7 +36,6 @@ namespace Ur
 		private State _state;
 		private readonly List<string> _items = new List<string>();
 		private string _currentSource;
-		private string _thisName;
 		private readonly Dictionary<string, StringWriter> _writers = new Dictionary<string, StringWriter>();
 		private BaseConfig _currentStructConfig;
 
@@ -459,6 +458,8 @@ namespace Ur
 
 		internal void AppendGZ(CursorProcessResult crp)
 		{
+			return;
+
 			var info = crp.Info;
 
 			if (info.Kind == CXCursorKind.CXCursor_BinaryOperator)
@@ -641,11 +642,11 @@ namespace Ur
 							AppendGZ(b);
 						}
 
-						if (type.IsLogicalBooleanOperator())
+/*						if (type.IsLogicalBooleanOperator())
 						{
 							a.Expression = a.Expression.Parentize();
 							b.Expression = b.Expression.Parentize();
-						}
+						}*/
 
 						if (type.IsAssign() && type != BinaryOperatorKind.ShlAssign && type != BinaryOperatorKind.ShrAssign)
 						{
@@ -660,16 +661,6 @@ namespace Ur
 									{
 										b = bb;
 									}
-								}
-
-								if (b.Info.Kind == CXCursorKind.CXCursor_BinaryOperator &&
-									sealang.cursor_getBinaryOpcode(b.Info.Cursor).IsLogicalBooleanOperator())
-								{
-									b.Expression = "(" + b.Expression + "?1:0)";
-								}
-								else
-								{
-									b.Expression = b.Expression.Parentize();
 								}
 
 								b.Expression = b.Expression.ApplyCast(info.RustType);
@@ -708,14 +699,20 @@ namespace Ur
 							str = string.Empty;
 						}
 
+
+						if (type == UnaryOperatorKind.PreInc || type == UnaryOperatorKind.PostInc)
+						{
+							return a.Expression + " += 1";
+						}
+
+						if (type == UnaryOperatorKind.PreDec || type == UnaryOperatorKind.PostDec)
+						{
+							return a.Expression + " -= 1";
+						}
+
 						var left = type.IsUnaryOperatorPre();
 						if (left)
 						{
-							if (str == "*" && _functionInfos[_functionName].RefArguments.ContainsKey(a.Expression.Deparentize()))
-							{
-								return a.Expression;
-							}
-
 							return str + a.Expression;
 						}
 
@@ -750,82 +747,23 @@ namespace Ur
 						{
 							var argExpr = ProcessChildByIndex(info.Cursor, i);
 
-							if (functionInfo != null && functionInfo.RefArguments.ContainsValue(i - 1))
-							{
-								argExpr.Expression = argExpr.Expression.Replace("*", "");
-								argExpr.Expression = argExpr.Expression.Replace("&", "");
-								argExpr.Expression = "ref " + argExpr.Expression;
-							}
-							else if (!argExpr.Info.IsPointer)
+/*							if (!argExpr.Info.IsPointer)
 							{
 								argExpr.Expression = argExpr.Expression.ApplyCast(argExpr.Info.RustType);
 							}
 							else if (argExpr.Expression.Deparentize() == "0")
 							{
 								argExpr.Expression = "null";
-							}
+							}*/
 
 							args.Add(argExpr.Expression);
 						}
 
 						var sb = new StringBuilder();
 
-						if (functionInfo == null || functionInfo.Config.Static ||
-							functionInfo.Config.ThisArgPosition == null)
-						{
-							sb.Append(functionName + "(");
-							sb.Append(string.Join(", ", args));
-							sb.Append(")");
-						}
-						else
-						{
-							var argPos = functionInfo.Config.ThisArgPosition.Value;
-
-							if (args[argPos] != "this")
-							{
-								var argName = args[argPos].RemoveCasts();
-
-								bool? isPointer = null;
-								if (argName.StartsWith("*"))
-								{
-									isPointer = true;
-									argName = argName.Substring(1);
-								}
-								else if (argName.StartsWith("ref "))
-								{
-									isPointer = false;
-									argName = argName.Substring(4);
-								}
-								else if (argName.StartsWith("&"))
-								{
-									isPointer = false;
-									argName = argName.Substring(1);
-								}
-
-								if (isPointer == null)
-								{
-									isPointer = false;
-
-									var argExpr = ProcessChildByIndex(info.Cursor, argPos + 1);
-
-									isPointer = true;
-								}
-
-								sb.Append(argName);
-
-								sb.Append(isPointer.Value ? "->" : ".");
-							}
-
-							sb.Append(functionName + "(");
-
-							args.RemoveAt(functionInfo.Config.ThisArgPosition.Value);
-
-							if (args.Count > 0)
-							{
-								sb.Append(string.Join(", ", args));
-							}
-							sb.Append(")");
-						}
+						sb.Append(functionName + "(");
+						sb.Append(string.Join(", ", args));
+						sb.Append(")");
 
 						return sb.ToString();
 					}
@@ -839,11 +777,11 @@ namespace Ur
 						{
 							if (!_returnType.IsPointer())
 							{
-								if (child != null && child.Info.Kind == CXCursorKind.CXCursor_BinaryOperator &&
+/*								if (child != null && child.Info.Kind == CXCursorKind.CXCursor_BinaryOperator &&
 									sealang.cursor_getBinaryOpcode(child.Info.Cursor).IsLogicalBooleanOperator())
 								{
 									ret = "(" + ret + "?1:0)";
-								}
+								}*/
 
 								return "return " + ret.ApplyCast(_returnType.ToCSharpTypeString());
 							}
@@ -868,14 +806,14 @@ namespace Ur
 
 						if (executionExpr != null && !string.IsNullOrEmpty(executionExpr.Expression))
 						{
-							executionExpr.Expression = executionExpr.Expression.EnsureStatementFinished();
+							executionExpr.Expression = executionExpr.Expression.EnsureStatementFinished().Curlize();
 						}
 
-						var expr = "if (" + conditionExpr.Expression + ") " + executionExpr.Expression;
+						var expr = "if " + conditionExpr.Expression + " " + executionExpr.Expression;
 
 						if (elseExpr != null)
 						{
-							expr += " else " + elseExpr.Expression;
+							expr += " else " + elseExpr.Expression.EnsureStatementFinished().Curlize();
 						}
 
 						return expr;
@@ -930,15 +868,15 @@ namespace Ur
 						var executionExpr = ReplaceCommas(execution);
 						executionExpr = executionExpr.EnsureStatementFinished();
 
-						return "for (" + start.GetExpression() + "; " + condition.GetExpression() + "; " + it.GetExpression() + ") " +
-							   executionExpr.Curlize();
+						return start.GetExpression() + ";\n" + "while (" + condition.GetExpression() + ") {\n" + it.GetExpression() + ";\n" +
+							   executionExpr + "}";
 					}
 
 				case CXCursorKind.CXCursor_CaseStmt:
 					{
 						var expr = ProcessChildByIndex(info.Cursor, 0);
 						var execution = ProcessChildByIndex(info.Cursor, 1);
-						return "case " + expr.Expression + ":" + execution.Expression;
+						return expr.Expression + " => " + execution.Expression.Curlize();
 					}
 
 				case CXCursorKind.CXCursor_DefaultStmt:
@@ -951,7 +889,7 @@ namespace Ur
 					{
 						var expr = ProcessChildByIndex(info.Cursor, 0);
 						var execution = ProcessChildByIndex(info.Cursor, 1);
-						return "switch (" + expr.Expression + ")" + execution.Expression;
+						return "match " + expr.Expression + execution.Expression;
 					}
 
 				case CXCursorKind.CXCursor_DoStmt:
@@ -1005,7 +943,7 @@ namespace Ur
 						var a = ProcessChildByIndex(info.Cursor, 1);
 						var b = ProcessChildByIndex(info.Cursor, 2);
 
-						if (condition.Info.IsPrimitiveNumericType)
+/*						if (condition.Info.IsPrimitiveNumericType)
 						{
 							var gz = true;
 
@@ -1030,20 +968,15 @@ namespace Ur
 							{
 								condition.Expression = condition.Expression.Parentize() + " != 0";
 							}
-						}
+						}*/
 
-						return condition.Expression + "?" + a.Expression + ":" + b.Expression;
+						return "if " + condition.Expression + "{" + a.Expression + "} else {" + b.Expression + "}";
 					}
 				case CXCursorKind.CXCursor_MemberRefExpr:
 					{
 						var a = ProcessChildByIndex(info.Cursor, 0);
 
 						var op = ".";
-						if (a.Expression != "this" && a.Info.IsPointer &&
-							!_functionInfos[_functionName].RefArguments.ContainsKey(a.Expression))
-						{
-							op = "->";
-						}
 
 						var result = a.Expression + op + info.Spelling.FixSpecialWords();
 
@@ -1072,11 +1005,22 @@ namespace Ur
 						}
 					}
 				case CXCursorKind.CXCursor_CharacterLiteral:
-					return "'" + sealang.cursor_getLiteralString(info.Cursor) + "'";
+					var s = sealang.cursor_getLiteralString(info.Cursor).ToString();
+					if (string.IsNullOrEmpty(s) || (s.Length == 1 && s[0] == '\0'))
+					{
+						s = "\\0";
+					}
+
+					return "'" + s + "'";
 				case CXCursorKind.CXCursor_StringLiteral:
 					return info.Spelling.StartsWith("L") ? info.Spelling.Substring(1) : info.Spelling;
 				case CXCursorKind.CXCursor_VarDecl:
 					{
+						if (_functionName == "stbi__convert_16_to_8")
+						{
+							var k = 5;
+						}
+
 						CursorProcessResult rvalue = null;
 						var size = info.Cursor.GetChildrenCount();
 
@@ -1116,7 +1060,7 @@ namespace Ur
 									}
 									else
 									{
-										rvalue.Expression = "stackalloc " + arrayType + "[" + sizeExp + "]";
+										rvalue.Expression = "";
 									}
 								}
 							}
@@ -1191,7 +1135,12 @@ namespace Ur
 						}
 						else if (!info.IsPointer)
 						{
-							expr += " =  new " + info.RustType + "()";
+//							expr += " =  new " + info.RustType + "()";
+						}
+
+						if (_state == State.Functions)
+						{
+							expr = "let " + expr;
 						}
 
 						return expr;
@@ -1264,20 +1213,20 @@ namespace Ur
 						var expr = ProcessPossibleChildByIndex(info.Cursor, 0);
 						var e = expr.GetExpression();
 
-						if (info.RustType != expr.Info.RustType)
+/*						if (info.RustType != expr.Info.RustType)
 						{
 							e = e.ApplyCast(info.RustType);
 						}
 						else
 						{
 							e = e.Parentize();
-						}
+						}*/
 
 						return e;
 					}
 
 				case CXCursorKind.CXCursor_BreakStmt:
-					return "break";
+					return ",";
 				case CXCursorKind.CXCursor_ContinueStmt:
 					return "continue";
 
@@ -1291,11 +1240,6 @@ namespace Ur
 						if (info.RustType != child.Info.RustType)
 						{
 							expr = expr.ApplyCast(info.RustType);
-						}
-
-						if (expr.Deparentize() == "0")
-						{
-							expr = "null";
 						}
 
 						return expr;
@@ -1313,20 +1257,14 @@ namespace Ur
 
 						var expr = ProcessPossibleChildByIndex(info.Cursor, size - 1);
 
-						/*					if (!_parameters.GlobalArrays.Contains(info.Spelling) &&
-												info.IsPointer && !info.CsType.Contains("PinnedArray") && 
-												info.CsType != expr.Info.CsType &&
-												(info.Type.GetPointeeType().IsStruct() ||
-												info.Type.GetPointeeType().kind.IsPrimitiveNumericType() ||
-												 (expr.Info.Kind == CXCursorKind.CXCursor_IntegerLiteral && info.CsType == "void *")) &&
-												expr.Info.Kind != CXCursorKind.CXCursor_StringLiteral)
-											{
-												expr.Expression = expr.Expression.ApplyCast(info.CsType).Parentize();
-											}*/
-
 						if (info.IsPointer && expr.Expression.Deparentize() == "0")
 						{
 							expr.Expression = "null";
+						}
+
+						if (info.IsPointer && expr.Info.IsArray)
+						{
+							expr.Expression += ".as_mut_ptr()";
 						}
 
 						return expr.Expression;
@@ -1354,11 +1292,6 @@ namespace Ur
 			var info = new CursorInfo(cursor);
 
 			var expr = InternalProcess(info);
-
-			if (!string.IsNullOrEmpty(_thisName) && expr == _thisName)
-			{
-				expr = "this";
-			}
 
 			return new CursorProcessResult(info)
 			{
@@ -1404,14 +1337,6 @@ namespace Ur
 				sb.Append(typeName);
 				sb.Append(" ");
 				sb.Append(name);
-				if (typeName.EndsWith("*"))
-				{
-					if (Parameters.UseRefInsteadOfPointer != null && !typeName.StartsWith("void") &&
-						Parameters.UseRefInsteadOfPointer(functionName, typeName, name))
-					{
-						_functionInfos[functionName].RefArguments[name] = (int)i;
-					}
-				}
 
 				if (i < numArgTypes - 1)
 				{
@@ -1421,11 +1346,11 @@ namespace Ur
 
 			_functionInfos[functionName].Signature = sb.ToString();
 
-			FunctionConfig fc;
+			BaseConfig fc;
 
 			if (Parameters.FunctionSource == null)
 			{
-				fc = new FunctionConfig
+				fc = new BaseConfig
 				{
 					Name = _functionName,
 					Source = null
@@ -1462,23 +1387,9 @@ namespace Ur
 
 			var info = _functionInfos[functionName];
 
-			var sb = new StringBuilder();
+			IndentedWrite("unsafe fn ");
 
-			IndentedWrite("public ");
-
-			_thisName = info.Config.ThisName;
-			if (info.Config.Static || string.IsNullOrEmpty(_thisName))
-			{
-				_thisName = string.Empty;
-				Write("static ");
-			}
-
-			sb.Append(_returnType.ToCSharpTypeString());
-			sb.Append(" " + info.Config.Name);
-
-			var fd = sb.ToString();
-
-			Write(fd);
+			Write(info.Config.Name);
 			Write("(");
 
 			_items.Clear();
@@ -1489,11 +1400,6 @@ namespace Ur
 			var first = true;
 			for (var i = (uint)0; i < numArgTypes; ++i)
 			{
-				if (!info.Config.Static && i == info.Config.ThisArgPosition)
-				{
-					continue;
-				}
-
 				if (!first)
 				{
 					Write(", ");
@@ -1503,12 +1409,18 @@ namespace Ur
 				first = false;
 			}
 
-			WriteLine(")");
+			Write(")");
+
+			if (_returnType.kind != CXTypeKind.CXType_Void)
+			{
+				Write(" -> " + _returnType.ToCSharpTypeString() + " ");
+			}
+
 			IndentedWriteLine("{");
 
 			if (Parameters.FunctionHeaderProcessed != null)
 			{
-				Parameters.FunctionHeaderProcessed(fd, _items.ToArray());
+				Parameters.FunctionHeaderProcessed(info.Config.Name, _items.ToArray());
 			}
 		}
 
@@ -1521,17 +1433,12 @@ namespace Ur
 			var name = spelling.FixSpecialWords();
 			var typeName = type.ToCSharpTypeString(true);
 
-			if (_functionInfos[_functionName].RefArguments.ContainsKey(name))
-			{
-				typeName = "ref " + typeName.Substring(0, typeName.Length - 1);
-			}
-
 			var sb = new StringBuilder();
 
-			sb.Append(typeName);
-			sb.Append(" ");
-
 			sb.Append(name);
+			sb.Append(":");
+			sb.Append(typeName);
+
 
 			_items.Add(sb.ToString());
 

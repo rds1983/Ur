@@ -23,6 +23,8 @@ namespace Ur
 				arr.Add("-D" + d);
 			}
 
+			arr.Add(@"-IC:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.14.26428\include");
+
 			var createIndex = clang.createIndex(0, 0);
 			CXUnsavedFile unsavedFile;
 
@@ -68,7 +70,7 @@ namespace Ur
 
 			// Process
 			Processor = new ConversionProcessor(parameters, tu);
-			// Processor = new DumpProcessor(tu, _output);
+			// Processor = new DumpProcessor(tu);
 			Processor.Run();
 
 			if (parameters.BeforeLastClosingBracket != null)

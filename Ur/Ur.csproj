@@ -63,7 +63,6 @@
     <Compile Include="DumpProcessor.cs" />
     <Compile Include="ForwardDeclarationVisitor.cs" />
     <Compile Include="ConversionProcessor.cs" />
-    <Compile Include="FunctionConfig.cs" />
     <Compile Include="FunctionInfo.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

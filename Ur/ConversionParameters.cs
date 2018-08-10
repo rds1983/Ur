@@ -6,7 +6,6 @@ namespace Ur
 	{
 		public string InputPath { get; set; }
 		public string[] Defines { get; set; }
-		public string Namespace { get; set; }
 		public bool IsPartial { get; set; }
 
 		public bool AddGeneratedByUr { get;set; }
@@ -17,7 +16,7 @@ namespace Ur
 		public Func<string, BaseConfig> StructSource { get; set; }
 		public Func<string, BaseConfig> GlobalVariableSource { get; set; }
 		public Func<string, BaseConfig> EnumSource { get; set; }
-		public Func<FunctionInfo, FunctionConfig> FunctionSource { get; set; }
+		public Func<FunctionInfo, BaseConfig> FunctionSource { get; set; }
 
 		public ConversionParameters()
 		{
