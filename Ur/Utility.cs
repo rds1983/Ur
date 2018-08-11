@@ -19,7 +19,7 @@ namespace Ur
 
 		private static readonly HashSet<string> _specialWords = new HashSet<string>(new[]
 		{
-			"out", "in", "base", "null", "string", "type"
+			"out", "in", "base", "null", "string", "type", "final"
 		});
 
 		public static string FixSpecialWords(this string name)
@@ -67,13 +67,13 @@ namespace Ur
 				case CXTypeKind.CXType_Char_S:
 					return "i8";
 				case CXTypeKind.CXType_UShort:
-					return "ushort";
+					return "u16";
 				case CXTypeKind.CXType_Short:
-					return "short";
+					return "i16";
 				case CXTypeKind.CXType_Float:
 					return "f32";
 				case CXTypeKind.CXType_Double:
-					return "double";
+					return "f64";
 				case CXTypeKind.CXType_Int:
 					return "i32";
 				case CXTypeKind.CXType_UInt:
@@ -88,7 +88,7 @@ namespace Ur
 				case CXTypeKind.CXType_LongLong:
 					return "long";
 				case CXTypeKind.CXType_ULongLong:
-					return "ulong";
+					return "u64";
 				case CXTypeKind.CXType_Void:
 					return "void";
 				case CXTypeKind.CXType_Unexposed:
@@ -123,7 +123,14 @@ namespace Ur
 
 			var sb = new StringBuilder();
 
-			sb.Append("*mut ");
+			if (type.kind.IsPrimitiveNumericType())
+			{
+				sb.Append("*mut ");
+			} else
+			{
+				sb.Append("&mut ");
+			}
+
 			sb.Append(ToCSharpTypeString(type));
 
 			return sb.ToString();
@@ -309,7 +316,7 @@ namespace Ur
 			return result.ToArray();
 		}
 
-		public static string EnsureStatementFinished(this string statement)
+		public static string EnsureStatementFinished(this string statement, string end = ";")
 		{
 			var trimmed = statement.Trim();
 
@@ -318,9 +325,9 @@ namespace Ur
 				return trimmed;
 			}
 
-			if (!trimmed.EndsWith(";") && !trimmed.EndsWith("}"))
+			if (!trimmed.EndsWith(end) && !trimmed.EndsWith("}"))
 			{
-				return statement + ";";
+				return statement + end;
 			}
 
 			return statement;
@@ -648,19 +655,17 @@ namespace Ur
 				methods.Add(f.Name);
 			}
 
-			var name = type.Name;
+			var prefix = "c_runtime::";
 			foreach (var m in methods)
 			{
-				data = data.Replace("(" + m + "(", "(" + name + "." + m + "(");
-				data = data.Replace(" " + m + "(", " " + name + "." + m + "(");
-				data = data.Replace(";" + m + "(", ";" + name + "." + m + "(");
-				data = data.Replace(":" + m + "(", ":" + name + "." + m + "(");
-				data = data.Replace("\t" + m + "(", "\t" + name + "." + m + "(");
-				data = data.Replace("\n" + m + "(", "\n" + name + "." + m + "(");
-				data = data.Replace("-" + m + "(", "-" + name + "." + m + "(");
-				data = data.Replace("{" + m + "(", "{" + name + "." + m + "(");
-				data = data.Replace("}" + m + "(", "}" + name + "." + m + "(");
-				data = data.Replace("?" + m + "(", "?" + name + "." + m + "(");
+				data = data.Replace("(" + m + "(", "(" + prefix + m + "(");
+				data = data.Replace(" " + m + "(", " " + prefix + m + "(");
+				data = data.Replace(";" + m + "(", ";" + prefix + m + "(");
+				data = data.Replace("\t" + m + "(", "\t" + prefix + m + "(");
+				data = data.Replace("\n" + m + "(", "\n" + prefix + m + "(");
+				data = data.Replace("-" + m + "(", "-" + prefix + m + "(");
+				data = data.Replace("{" + m + "(", "{" + prefix + m + "(");
+				data = data.Replace("}" + m + "(", "}" + prefix + m + "(");
 			}
 
 			return data;
