@@ -82,11 +82,11 @@ namespace Ur
 				case CXTypeKind.CXType_NullPtr: // ugh, what else can I do?
 					return "IntPtr";
 				case CXTypeKind.CXType_Long:
-					return "int";
+					return "i64";
 				case CXTypeKind.CXType_ULong:
-					return "int";
+					return "u64";
 				case CXTypeKind.CXType_LongLong:
-					return "long";
+					return "i64";
 				case CXTypeKind.CXType_ULongLong:
 					return "u64";
 				case CXTypeKind.CXType_Void:
@@ -128,7 +128,7 @@ namespace Ur
 				sb.Append("*mut ");
 			} else
 			{
-				sb.Append("&mut ");
+				sb.Append("*mut ");
 			}
 
 			sb.Append(ToCSharpTypeString(type));
@@ -383,7 +383,6 @@ namespace Ur
 			return result.Value;
 		}
 
-
 		public static bool IsBinaryOperator(this BinaryOperatorKind op)
 		{
 			return op == BinaryOperatorKind.And || op == BinaryOperatorKind.Or;
@@ -398,7 +397,8 @@ namespace Ur
 		{
 			return op == BinaryOperatorKind.LAnd || op == BinaryOperatorKind.LOr ||
 				   op == BinaryOperatorKind.EQ || op == BinaryOperatorKind.GE ||
-				   op == BinaryOperatorKind.GT || op == BinaryOperatorKind.LT;
+				   op == BinaryOperatorKind.GT || op == BinaryOperatorKind.LT ||
+				   op == BinaryOperatorKind.LE;
 		}
 
 		public static bool IsBooleanOperator(this BinaryOperatorKind op)
@@ -584,9 +584,7 @@ namespace Ur
 				return expr;
 			}
 
-			type = type.Replace("mut ", "");
-
-			return type.Parentize() + expr.Parentize();
+			return (expr.Parentize() + " as " + type).Parentize();
 		}
 
 		public static string RemoveCasts(this string expr)

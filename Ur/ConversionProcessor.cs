@@ -40,6 +40,7 @@ namespace Ur
 		private BaseConfig _currentStructConfig;
 		private int _switchCount;
 		private string _switchExpression;
+		private readonly HashSet<string> _localStructs = new HashSet<string>();
 
 		public override Dictionary<string, StringWriter> Outputs
 		{
@@ -481,7 +482,7 @@ namespace Ur
 					sealang.cursor_getBinaryOpcode(child2.Info.Cursor).IsBinaryOperator())
 				{
 					var sub = ProcessChildByIndex(crp.Info.Cursor, 0);
-					crp.Expression = sub.Expression.Parentize() + "!= 0";
+					crp.Expression = sub.Expression.Parentize() + " != 0";
 				}
 				return;
 			}
@@ -516,7 +517,7 @@ namespace Ur
 				if (type == UnaryOperatorKind.LNot)
 				{
 					var sub = ProcessChildByIndex(crp.Info.Cursor, 0);
-					crp.Expression = sub.Expression + "== 0";
+					crp.Expression = sub.Expression + " == 0";
 
 					return;
 				}
@@ -645,11 +646,11 @@ namespace Ur
 							AppendGZ(b);
 						}
 
-/*						if (type.IsLogicalBooleanOperator())
-						{
-							a.Expression = a.Expression.Parentize();
-							b.Expression = b.Expression.Parentize();
-						}*/
+						/*						if (type.IsLogicalBooleanOperator())
+												{
+													a.Expression = a.Expression.Parentize();
+													b.Expression = b.Expression.Parentize();
+												}*/
 
 						if (type.IsAssign() && type != BinaryOperatorKind.ShlAssign && type != BinaryOperatorKind.ShrAssign)
 						{
@@ -666,7 +667,7 @@ namespace Ur
 									}
 								}
 
-//								b.Expression = b.Expression.ApplyCast(info.RustType);
+								b.Expression = b.Expression.ApplyCast(info.RustType);
 							}
 						}
 
@@ -675,7 +676,7 @@ namespace Ur
 							switch (type)
 							{
 								case BinaryOperatorKind.Add:
-									return a.Expression + "[" + b.Expression + "]";
+									return "(" + a.Expression + ").offset((" + b.Expression + ") as isize)";
 							}
 						}
 
@@ -685,13 +686,16 @@ namespace Ur
 							b.Expression = "std::ptr::null_mut()";
 						}
 
+						if (_functionName == "stbi__start_callbacks")
+
+
+						if (a.Info.IsPointer && b.Info.IsPointer && type == BinaryOperatorKind.Assign)
+						{
+							// b.Expression += ".as_mut_ptr()";
+						}
+
 						var str = sealang.cursor_getOperatorString(info.Cursor);
 						var result = a.Expression + " " + str + " " + b.Expression;
-
-						if (type.IsAssign())
-						{
-							result = result + ";";
-						}
 
 						return result;
 					}
@@ -702,14 +706,23 @@ namespace Ur
 						var type = sealang.cursor_getUnaryOpcode(info.Cursor);
 						var str = sealang.cursor_getOperatorString(info.Cursor).ToString();
 
-						if ((type == UnaryOperatorKind.AddrOf || type == UnaryOperatorKind.Deref))
+						if (type == UnaryOperatorKind.AddrOf)
 						{
-							str = string.Empty;
+							str = "&mut ";
 						}
 
+						if (type == UnaryOperatorKind.Deref)
+						{
+							str = "*";
+						}
 
 						if (type == UnaryOperatorKind.PreInc || type == UnaryOperatorKind.PostInc)
 						{
+							if (a.Info.IsPointer)
+							{
+								return "(" + a.Expression + " = " + a.Expression + ".offset(1))";
+							}
+
 							return a.Expression + " += 1";
 						}
 
@@ -760,19 +773,29 @@ namespace Ur
 						{
 							var argExpr = ProcessChildByIndex(info.Cursor, i);
 
-/*							if (!argExpr.Info.IsPointer)
+							if (!argExpr.Info.IsPointer)
 							{
 								argExpr.Expression = argExpr.Expression.ApplyCast(argExpr.Info.RustType);
-							}
-							else if (argExpr.Expression.Deparentize() == "0")
+							} else if (_localStructs.Contains(argExpr.Expression))
 							{
-								argExpr.Expression = "null";
-							}*/
+								argExpr.Expression = ("&" + argExpr.Expression).ApplyCast(argExpr.Info.RustType);
+
+							}
+
+							/*							else if (argExpr.Expression.Deparentize() == "0")
+														{
+															argExpr.Expression = "null";
+														}*/
 
 							args.Add(argExpr.Expression);
 						}
 
 						var sb = new StringBuilder();
+
+						if (functionName.Contains("."))
+						{
+							functionName = "(" + functionName + ")";
+						}
 
 						sb.Append(functionName + "(");
 						sb.Append(string.Join(", ", args));
@@ -782,6 +805,11 @@ namespace Ur
 					}
 				case CXCursorKind.CXCursor_ReturnStmt:
 					{
+						if (_functionName == "stbi__mul2sizes_valid")
+						{
+							var k = 5;
+						}
+
 						var child = ProcessPossibleChildByIndex(info.Cursor, 0);
 
 						var ret = child.GetExpression();
@@ -790,11 +818,11 @@ namespace Ur
 						{
 							if (!_returnType.IsPointer())
 							{
-/*								if (child != null && child.Info.Kind == CXCursorKind.CXCursor_BinaryOperator &&
+								if (child != null && child.Info.Kind == CXCursorKind.CXCursor_BinaryOperator &&
 									sealang.cursor_getBinaryOpcode(child.Info.Cursor).IsLogicalBooleanOperator())
 								{
-									ret = "(" + ret + "?1:0)";
-								}*/
+									ret = "(" + ret + ") as i32";
+								}
 
 								return "return " + ret;
 							}
@@ -1006,7 +1034,7 @@ namespace Ur
 						var a = ProcessChildByIndex(info.Cursor, 1);
 						var b = ProcessChildByIndex(info.Cursor, 2);
 
-/*						if (condition.Info.IsPrimitiveNumericType)
+						if (condition.Info.IsPrimitiveNumericType)
 						{
 							var gz = true;
 
@@ -1031,13 +1059,21 @@ namespace Ur
 							{
 								condition.Expression = condition.Expression.Parentize() + " != 0";
 							}
-						}*/
+						}
 
 						return "if " + condition.Expression + "{" + a.Expression + "} else {" + b.Expression + "}";
 					}
 				case CXCursorKind.CXCursor_MemberRefExpr:
 					{
 						var a = ProcessChildByIndex(info.Cursor, 0);
+
+						var fn = _functionInfos[_functionName];
+						string t;
+						if(fn.Arguments.TryGetValue(a.Expression, out t) && t.Contains("*"))
+						{
+							// Pointer argument
+							a.Expression = "(*" + a.Expression + ")";
+						}
 
 						var op = ".";
 
@@ -1121,7 +1157,7 @@ namespace Ur
 									}
 									else
 									{
-										rvalue.Expression = "unsafe {std::mem::uninitialized()}";
+										rvalue.Expression = "std::mem::uninitialized()";
 									}
 								}
 							}
@@ -1191,7 +1227,9 @@ namespace Ur
 						}
 						else if (!info.IsPointer)
 						{
-//							expr += " =  new " + info.RustType + "()";
+							expr += " = std::mem::uninitialized()";
+
+							_localStructs.Add(name);
 						}
 
 						if (_state == State.Functions)
@@ -1245,6 +1283,11 @@ namespace Ur
 					{
 						var var = ProcessChildByIndex(info.Cursor, 0);
 						var expr = ProcessChildByIndex(info.Cursor, 1);
+
+						if (var.Info.IsPointer)
+						{
+							return "*" + var.Expression + ".offset((" + expr.Expression + ") as isize)";
+						}
 
 						return var.Expression + "[" + expr.Expression + "]";
 					}
@@ -1300,10 +1343,10 @@ namespace Ur
 
 						var expr = child.Expression;
 
-/*						if (info.RustType != child.Info.RustType)
+						if (info.RustType != child.Info.RustType)
 						{
 							expr = expr.ApplyCast(info.RustType);
-						}*/
+						}
 
 						return expr;
 					}
@@ -1327,7 +1370,13 @@ namespace Ur
 
 						if (info.IsPointer && expr.Info.IsArray)
 						{
-							// expr.Expression += ".as_mut_ptr()";
+							expr.Expression += ".as_mut_ptr()";
+						}
+
+						if (info.IsPrimitiveNumericType && expr.Info.IsPrimitiveNumericType &&
+							info.RustType != expr.Info.RustType)
+						{
+							expr.Expression = expr.Expression.ApplyCast(info.RustType);
 						}
 
 						return expr.Expression;
@@ -1405,6 +1454,8 @@ namespace Ur
 				{
 					sb.Append(", ");
 				}
+
+				_functionInfos[functionName].Arguments[name] = typeName;
 			}
 
 			_functionInfos[functionName].Signature = sb.ToString();
@@ -1432,6 +1483,8 @@ namespace Ur
 			WriteFunctionStart(cursor);
 
 			_indentLevel++;
+
+			_localStructs.Clear();
 
 			clang.visitChildren(_functionStatement, VisitFunctionBody, new CXClientData(IntPtr.Zero));
 
