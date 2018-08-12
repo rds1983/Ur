@@ -676,5 +676,12 @@ namespace Ur
 
 			return data;
 		}
+
+		public static bool IsWord(this string s)
+		{
+			var regex = new Regex(@"\b[\w']+\b");
+			var match = regex.Match(s);
+			return match.Value.Equals(s);
+		}
 	}
 }

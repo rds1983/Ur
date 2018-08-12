@@ -856,7 +856,20 @@ namespace Ur
 						{
 							var argExpr = ProcessChildByIndex(info.Cursor, i);
 
-							argExpr.Expression = argExpr.Expression.ApplyCast(argExpr.Info.RustType);
+							if (argExpr.Info.IsPointer && argExpr.Expression.IsWord() && !_localPointers.Contains(argExpr.Expression))
+							{
+								argExpr.Expression += ".as_mut_ptr()";
+							}
+
+							if (argExpr.Info.Cursor.GetChildrenCount() > 0)
+							{
+								var argChild = ProcessChildByIndex(argExpr.Info.Cursor, 0);
+
+								if (argExpr.Info.RustType != argChild.Info.RustType)
+								{
+									argExpr.Expression = argExpr.Expression.ApplyCast(argExpr.Info.RustType);
+								}
+							}
 
 							/*							else if (argExpr.Expression.Deparentize() == "0")
 														{
@@ -1152,14 +1165,12 @@ namespace Ur
 					{
 						var a = ProcessChildByIndex(info.Cursor, 0);
 
-						string t;
-						if(_localPointers.Contains(a.Expression))
-						{
-							// Pointer argument
-							a.Expression = "(*" + a.Expression + ")";
-						}
-
 						var op = ".";
+
+						if (a.Info.Kind == CXCursorKind.CXCursor_UnexposedExpr)
+						{
+							a.Expression = ("*" + a.Expression).Parentize();
+						}
 
 						var result = a.Expression + op + info.Spelling.FixSpecialWords();
 
@@ -1370,12 +1381,12 @@ namespace Ur
 						var var = ProcessChildByIndex(info.Cursor, 0);
 						var expr = ProcessChildByIndex(info.Cursor, 1);
 
-						if (var.Info.IsPointer)
+						if (_localPointers.Contains(var.Expression))
 						{
 							return "*" + var.Expression + ".offset((" + expr.Expression + ") as isize)";
 						}
 
-						return var.Expression + "[" + expr.Expression + "]";
+						return var.Expression + "[(" + expr.Expression + ") as usize]";
 					}
 
 				case CXCursorKind.CXCursor_InitListExpr:
@@ -1462,9 +1473,11 @@ namespace Ur
 							expr.Expression = "std::ptr::null_mut()";
 						}
 
-						if (info.IsPointer && expr.Info.IsArray && !_localPointers.Contains(expr.Expression))
+						if (info.IsPointer && 
+							(expr.Info.Kind == CXCursorKind.CXCursor_DeclRefExpr || expr.Info.Kind == CXCursorKind.CXCursor_MemberRefExpr) && 
+							expr.Info.IsArray && !_localPointers.Contains(expr.Expression))
 						{
-							expr.Expression += ".as_mut_ptr()";
+//							expr.Expression += ".as_mut_ptr()";
 						}
 
 						if (info.IsPrimitiveNumericType && expr.Info.IsPrimitiveNumericType &&
