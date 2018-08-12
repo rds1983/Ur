@@ -39,6 +39,7 @@ namespace Ur
 		private readonly Dictionary<string, StringWriter> _writers = new Dictionary<string, StringWriter>();
 		private BaseConfig _currentStructConfig;
 		private int _switchCount;
+		private bool _insideSwitch;
 		private string _switchExpression;
 		private readonly HashSet<string> _localStructs = new HashSet<string>();
 		private readonly HashSet<string> _localPointers = new HashSet<string>();
@@ -996,18 +997,18 @@ namespace Ur
 
 						if (execution.Info.Kind == CXCursorKind.CXCursor_CompoundStmt)
 						{
-							var openingBracketIndex = executionExpr.IndexOf('{');
+							var openingBracketIndex = executionExpr.LastIndexOf('}');
 
 							if (openingBracketIndex != -1)
 							{
-								executionExpr = executionExpr.Substring(0, openingBracketIndex + 1) + itExpr + ";\n" + executionExpr.Substring(openingBracketIndex + 1);
+								executionExpr = executionExpr.Substring(0, openingBracketIndex) + itExpr.EnsureStatementFinished() + "}";
 
 								return startExpr + ";\n" + "while (" + condExpr + ") " + executionExpr;
 							}
 						}
 
-						return startExpr + ";\n" + "while (" + condExpr + ") {\n" + itExpr + ";\n" +
-							   executionExpr + "}";
+						return startExpr + ";\n" + "while (" + condExpr + ") {" +
+							   executionExpr + itExpr.EnsureStatementFinished() +  "}";
 					}
 
 				case CXCursorKind.CXCursor_CaseStmt:
@@ -1044,9 +1045,12 @@ namespace Ur
 
 				case CXCursorKind.CXCursor_SwitchStmt:
 					{
+						_insideSwitch = true;
 						_switchCount = 0;
 						_switchExpression = ProcessChildByIndex(info.Cursor, 0).Expression;
 						var execution = ProcessChildByIndex(info.Cursor, 1);
+
+						_insideSwitch = false;
 						return execution.Expression + "}";
 					}
 
@@ -1401,20 +1405,24 @@ namespace Ur
 						var expr = ProcessPossibleChildByIndex(info.Cursor, 0);
 						var e = expr.GetExpression();
 
-/*						if (info.RustType != expr.Info.RustType)
+						if (info.RustType != expr.Info.RustType)
 						{
-							e = e.ApplyCast(info.RustType);
+//							e = e.ApplyCast(info.RustType);
 						}
 						else
 						{
 							e = e.Parentize();
-						}*/
+						}
 
 						return e;
 					}
 
 				case CXCursorKind.CXCursor_BreakStmt:
-					return ",";
+					if (_insideSwitch)
+					{
+						return ",";
+					}
+					return "break";
 				case CXCursorKind.CXCursor_ContinueStmt:
 					return "continue";
 
