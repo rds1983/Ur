@@ -112,7 +112,7 @@ namespace Ur
 			return type;
 		}
 
-		private static string ProcessPointerType(this CXType type)
+		private static string ProcessPointerType(this CXType type, bool treatArrayAsPointer)
 		{
 			type = type.Desugar();
 
@@ -131,12 +131,12 @@ namespace Ur
 				sb.Append("*mut ");
 			}
 
-			sb.Append(ToCSharpTypeString(type));
+			sb.Append(ToCSharpTypeString(type, treatArrayAsPointer));
 
 			return sb.ToString();
 		}
 
-		public static string ToCSharpTypeString(this CXType type, bool replace = true)
+		public static string ToCSharpTypeString(this CXType type, bool treatArrayAsPointer = false, bool replace = true)
 		{
 			var isConstQualifiedType = clang.isConstQualifiedType(type) != 0;
 			var spelling = string.Empty;
@@ -161,10 +161,18 @@ namespace Ur
 					break;
 				case CXTypeKind.CXType_ConstantArray:
 					var t = clang.getArrayElementType(type);
-					sb.Append("[" + t.ToCSharpTypeString() + ";" + type.GetArraySize() + "]");
+
+					if (treatArrayAsPointer)
+					{
+						sb.Append(ProcessPointerType(t, true));
+					}
+					else
+					{
+						sb.Append("[" + t.ToCSharpTypeString() + ";" + type.GetArraySize() + "]");
+					}
 					break;
 				case CXTypeKind.CXType_Pointer:
-					sb.Append(ProcessPointerType(clang.getPointeeType(type)));
+					sb.Append(ProcessPointerType(clang.getPointeeType(type), treatArrayAsPointer));
 					break;
 				default:
 					spelling = clang.getCanonicalType(type).ToPlainTypeString();

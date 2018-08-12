@@ -41,6 +41,7 @@ namespace Ur
 		private int _switchCount;
 		private string _switchExpression;
 		private readonly HashSet<string> _localStructs = new HashSet<string>();
+		private readonly HashSet<string> _localPointers = new HashSet<string>();
 
 		public override Dictionary<string, StringWriter> Outputs
 		{
@@ -153,7 +154,7 @@ namespace Ur
 
 		private void WriteClassStart(TextWriter sw, string cls)
 		{
-			sw.Write("struct {0} {{\n", cls);
+			sw.Write("pub struct {0} {{\n", cls);
 		}
 
 		private void WriteClassStart(string cls)
@@ -311,7 +312,7 @@ namespace Ur
 						}
 					}
 
-					var expr = "const " + name + ":i32 = " + value + ";";
+					var expr = "pub const " + name + ":i32 = " + value + ";";
 
 					IndentedWriteLine(expr);
 					i++;
@@ -365,7 +366,7 @@ namespace Ur
 					res.Expression += ";";
 				}
 
-				res.Expression = "const " + res.Expression;
+				res.Expression = "pub static mut " + res.Expression;
 
 				if (!string.IsNullOrEmpty(res.Expression))
 				{
@@ -640,7 +641,65 @@ namespace Ur
 						var b = ProcessChildByIndex(info.Cursor, 1);
 						var type = sealang.cursor_getBinaryOpcode(info.Cursor);
 
-						if (type.IsLogicalBinaryOperator())
+						if (type == BinaryOperatorKind.Assign)
+						{
+							// Check for multiple assigns per line
+							if (b.Info.Kind == CXCursorKind.CXCursor_BinaryOperator)
+							{
+								var type2 = sealang.cursor_getBinaryOpcode(b.Info.Cursor);
+
+								if (type2 == BinaryOperatorKind.Assign)
+								{
+									var lvalues = new List<string>();
+
+									lvalues.Add(a.Expression);
+
+									// // Find right value
+									while (type2 == BinaryOperatorKind.Assign)
+									{
+										var a1 = ProcessChildByIndex(b.Info.Cursor, 0);
+										lvalues.Add(a1.Expression);
+
+										b = ProcessChildByIndex(b.Info.Cursor, 1);
+
+										type2 = sealang.cursor_getBinaryOpcode(b.Info.Cursor);
+									}
+
+									var sb = new StringBuilder();
+
+									foreach(var l in lvalues)
+									{
+										sb.Append(l + " = " + b.Expression.EnsureStatementFinished());
+									}
+
+									return sb.ToString();
+								}
+							}
+						}
+
+						if (type == BinaryOperatorKind.Assign)
+						{
+							// Check for case "*a++ = b";
+
+							if (a.Info.Kind == CXCursorKind.CXCursor_UnaryOperator && sealang.cursor_getUnaryOpcode(a.Info.Cursor) == UnaryOperatorKind.Deref)
+							{
+								var c = ProcessChildByIndex(a.Info.Cursor, 0);
+
+								if (c.Info.Kind == CXCursorKind.CXCursor_UnaryOperator &&
+									(sealang.cursor_getUnaryOpcode(c.Info.Cursor) == UnaryOperatorKind.PostInc ||
+									sealang.cursor_getUnaryOpcode(c.Info.Cursor) == UnaryOperatorKind.PreInc))
+								{
+									var d = ProcessChildByIndex(c.Info.Cursor, 0);
+
+									var s2 = "*" + d.Expression + " = " + b.Expression.EnsureStatementFinished() +
+										c.Expression;
+
+									return s2;
+								}
+							}
+						}
+
+							if (type.IsLogicalBinaryOperator())
 						{
 							AppendGZ(a);
 							AppendGZ(b);
@@ -668,15 +727,20 @@ namespace Ur
 								}
 
 								b.Expression = b.Expression.ApplyCast(info.RustType);
+							} else if (a.Info.RustType != b.Info.RustType)
+							{
+								b.Expression = b.Expression.ApplyCast(a.Info.RustType);
 							}
 						}
 
-						if (a.Info.IsPointer)
+						if (a.Info.IsPointer && b.Info.IsPrimitiveNumericType)
 						{
 							switch (type)
 							{
 								case BinaryOperatorKind.Add:
 									return "(" + a.Expression + ").offset((" + b.Expression + ") as isize)";
+								case BinaryOperatorKind.Sub:
+									return "(" + a.Expression + ").offset(-((" + b.Expression + ") as isize))";
 							}
 						}
 
@@ -694,8 +758,26 @@ namespace Ur
 							// b.Expression += ".as_mut_ptr()";
 						}
 
+						if (a.Info.IsPointer && b.Info.IsPointer && type == BinaryOperatorKind.Sub)
+						{
+							// b.Expression += ".as_mut_ptr()";
+
+							a.Expression = a.Expression.ApplyCast("usize");
+							b.Expression = b.Expression.ApplyCast("usize");
+						}
+
+						if (a.Info.IsPointer && type == BinaryOperatorKind.AddAssign)
+						{
+							return a.Expression + " = " + a.Expression + ".offset((" + b.Expression + ") as isize)";
+						}
+
 						var str = sealang.cursor_getOperatorString(info.Cursor);
 						var result = a.Expression + " " + str + " " + b.Expression;
+
+						if (type == BinaryOperatorKind.Shl || type == BinaryOperatorKind.Shr)
+						{
+							result = result.Parentize();
+						}
 
 						return result;
 					}
@@ -773,14 +855,7 @@ namespace Ur
 						{
 							var argExpr = ProcessChildByIndex(info.Cursor, i);
 
-							if (!argExpr.Info.IsPointer)
-							{
-								argExpr.Expression = argExpr.Expression.ApplyCast(argExpr.Info.RustType);
-							} else if (_localStructs.Contains(argExpr.Expression))
-							{
-								argExpr.Expression = ("&" + argExpr.Expression).ApplyCast(argExpr.Info.RustType);
-
-							}
+							argExpr.Expression = argExpr.Expression.ApplyCast(argExpr.Info.RustType);
 
 							/*							else if (argExpr.Expression.Deparentize() == "0")
 														{
@@ -911,7 +986,13 @@ namespace Ur
 						executionExpr = executionExpr.EnsureStatementFinished();
 
 						var startExpr = start.GetExpression().Replace(",", ";");
+						var condExpr = condition.GetExpression();
 						var itExpr = it.GetExpression().Replace(",", ";");
+
+						if (string.IsNullOrEmpty(condExpr))
+						{
+							condExpr = "true";
+						}
 
 						if (execution.Info.Kind == CXCursorKind.CXCursor_CompoundStmt)
 						{
@@ -921,11 +1002,11 @@ namespace Ur
 							{
 								executionExpr = executionExpr.Substring(0, openingBracketIndex + 1) + itExpr + ";\n" + executionExpr.Substring(openingBracketIndex + 1);
 
-								return startExpr + ";\n" + "while (" + condition.GetExpression() + ") " + executionExpr;
+								return startExpr + ";\n" + "while (" + condExpr + ") " + executionExpr;
 							}
 						}
 
-						return startExpr + ";\n" + "while (" + condition.GetExpression() + ") {\n" + itExpr + ";\n" +
+						return startExpr + ";\n" + "while (" + condExpr + ") {\n" + itExpr + ";\n" +
 							   executionExpr + "}";
 					}
 
@@ -1067,9 +1148,8 @@ namespace Ur
 					{
 						var a = ProcessChildByIndex(info.Cursor, 0);
 
-						var fn = _functionInfos[_functionName];
 						string t;
-						if(fn.Arguments.TryGetValue(a.Expression, out t) && t.Contains("*"))
+						if(_localPointers.Contains(a.Expression))
 						{
 							// Pointer argument
 							a.Expression = "(*" + a.Expression + ")";
@@ -1170,6 +1250,8 @@ namespace Ur
 							expr = name + ":[" + info.Type.GetPointeeType().ToCSharpTypeString() + ";" + info.Type.GetArraySize() + "]";
 						}
 
+
+
 						if (rvalue != null && !string.IsNullOrEmpty(rvalue.Expression))
 						{
 							if (!info.IsPointer && !info.IsArray)
@@ -1217,7 +1299,7 @@ namespace Ur
 									rvalue.Expression = "std::ptr::null_mut()";
 								}
 
-								if (info.IsArray)
+								if (string.IsNullOrEmpty(rvalue.Expression) && info.IsArray)
 								{
 									rvalue.Expression = "unsafe {std::mem::uninitialized()}";
 								}
@@ -1234,15 +1316,15 @@ namespace Ur
 
 						if (_state == State.Functions)
 						{
-							if (!info.IsPointer || info.IsArray)
-							{
-								expr = "mut " + expr;
-							}
-
-							expr = "let " + expr;
+							expr = "let mut " + expr;
 						}
 
 						expr = expr + ";";
+
+						if (info.IsPointer && !info.IsPrimitiveNumericType && !info.IsArray)
+						{
+							_localPointers.Add(name);
+						}
 
 						return expr;
 					}
@@ -1346,7 +1428,11 @@ namespace Ur
 						if (info.RustType != child.Info.RustType)
 						{
 							expr = expr.ApplyCast(info.RustType);
+						} else if (child != null && child.Info.Kind == CXCursorKind.CXCursor_CharacterLiteral)
+						{
+							expr = expr.ApplyCast("i32");
 						}
+
 
 						return expr;
 					}
@@ -1368,7 +1454,7 @@ namespace Ur
 							expr.Expression = "std::ptr::null_mut()";
 						}
 
-						if (info.IsPointer && expr.Info.IsArray)
+						if (info.IsPointer && expr.Info.IsArray && !_localPointers.Contains(expr.Expression))
 						{
 							expr.Expression += ".as_mut_ptr()";
 						}
@@ -1484,8 +1570,6 @@ namespace Ur
 
 			_indentLevel++;
 
-			_localStructs.Clear();
-
 			clang.visitChildren(_functionStatement, VisitFunctionBody, new CXClientData(IntPtr.Zero));
 
 			_indentLevel--;
@@ -1503,7 +1587,18 @@ namespace Ur
 
 			var info = _functionInfos[functionName];
 
-			IndentedWrite("unsafe fn ");
+			_localStructs.Clear();
+			_localPointers.Clear();
+
+			foreach(var pair in info.Arguments)
+			{
+				if (pair.Value.Contains("*"))
+				{
+					_localPointers.Add(pair.Key);
+				}
+			}
+
+			IndentedWrite("pub unsafe fn ");
 
 			Write(info.Config.Name);
 			Write("(");
@@ -1551,6 +1646,7 @@ namespace Ur
 
 			var sb = new StringBuilder();
 
+			sb.Append("mut ");
 			sb.Append(name);
 			sb.Append(":");
 			sb.Append(typeName);
