@@ -27,6 +27,7 @@ namespace Ur
 
 		private CXCursor _functionStatement;
 		private CXType _returnType;
+		private string _structName;
 		private string _functionName;
 		private readonly HashSet<string> _visitedStructs = new HashSet<string>();
 
@@ -41,8 +42,10 @@ namespace Ur
 		private int _switchCount;
 		private bool _insideSwitch;
 		private string _switchExpression;
-		private readonly HashSet<string> _localStructs = new HashSet<string>();
-		private readonly HashSet<string> _localPointers = new HashSet<string>();
+		private readonly Dictionary<string, HashSet<string>> _structPointerFields = new Dictionary<string, HashSet<string>>();
+		private readonly HashSet<string> _localArrays = new HashSet<string>();
+		private readonly HashSet<string> _globalArrays = new HashSet<string>();
+		private readonly Dictionary<string, string> _localVariables = new Dictionary<string, string>();
 
 		public override Dictionary<string, StringWriter> Outputs
 		{
@@ -111,40 +114,40 @@ namespace Ur
 			{
 				case CXCursorKind.CXCursor_UnionDecl:
 				case CXCursorKind.CXCursor_StructDecl:
-					var structName = clang.getCursorSpelling(cursor).ToString();
+					_structName = clang.getCursorSpelling(cursor).ToString();
 
 					// struct names can be empty, and so we visit its sibling to find the name
-					if (string.IsNullOrEmpty(structName))
+					if (string.IsNullOrEmpty(_structName))
 					{
 						var forwardDeclaringVisitor = new ForwardDeclarationVisitor(cursor);
 						clang.visitChildren(clang.getCursorSemanticParent(cursor), forwardDeclaringVisitor.Visit,
 							new CXClientData(IntPtr.Zero));
-						structName = clang.getCursorSpelling(forwardDeclaringVisitor.ForwardDeclarationCursor).ToString();
+						_structName = clang.getCursorSpelling(forwardDeclaringVisitor.ForwardDeclarationCursor).ToString();
 
-						if (string.IsNullOrEmpty(structName))
+						if (string.IsNullOrEmpty(_structName))
 						{
-							structName = "_";
+							_structName = "_";
 						}
 					}
 
-					if (!_visitedStructs.Contains(structName))
+					if (!_visitedStructs.Contains(_structName))
 					{
-						Logger.Info("Prerocessing struct {0}", structName);
+						Logger.Info("Prerocessing struct {0}", _structName);
 
 						if (_parameters.StructSource == null)
 						{
 							Logger.Warning("Skipping because ConversionParameters.StructSource is not set.");
 						}
 
-						var sc = _parameters.StructSource(structName);
+						var sc = _parameters.StructSource(_structName);
 
 						var info = new StructInfo
 						{
-							Name = structName,
+							Name = _structName,
 							Config = sc
 						};
 
-						_structInfos[structName] = info;
+						_structInfos[_structName] = info;
 					}
 
 					return CXChildVisitResult.CXChildVisit_Continue;
@@ -175,27 +178,27 @@ namespace Ur
 			{
 				case CXCursorKind.CXCursor_UnionDecl:
 				case CXCursorKind.CXCursor_StructDecl:
-					var structName = clang.getCursorSpelling(cursor).ToString();
+					_structName = clang.getCursorSpelling(cursor).ToString();
 
 					// struct names can be empty, and so we visit its sibling to find the name
-					if (string.IsNullOrEmpty(structName))
+					if (string.IsNullOrEmpty(_structName))
 					{
 						var forwardDeclaringVisitor = new ForwardDeclarationVisitor(cursor);
 						clang.visitChildren(clang.getCursorSemanticParent(cursor), forwardDeclaringVisitor.Visit,
 							new CXClientData(IntPtr.Zero));
-						structName = clang.getCursorSpelling(forwardDeclaringVisitor.ForwardDeclarationCursor).ToString();
+						_structName = clang.getCursorSpelling(forwardDeclaringVisitor.ForwardDeclarationCursor).ToString();
 
-						if (string.IsNullOrEmpty(structName))
+						if (string.IsNullOrEmpty(_structName))
 						{
-							structName = "_";
+							_structName = "_";
 						}
 					}
 
-					if (!_visitedStructs.Contains(structName) && cursor.GetChildrenCount() > 0)
+					if (!_visitedStructs.Contains(_structName) && cursor.GetChildrenCount() > 0)
 					{
-						Logger.Info("Processing struct {0}", structName);
+						Logger.Info("Processing struct {0}", _structName);
 
-						var info = _structInfos[structName];
+						var info = _structInfos[_structName];
 						_currentStructConfig = info.Config;
 
 						if (_currentStructConfig.Source == null || string.IsNullOrEmpty(_currentStructConfig.Source))
@@ -219,7 +222,7 @@ namespace Ur
 
 						WriteLine();
 
-						_visitedStructs.Add(structName);
+						_visitedStructs.Add(_structName);
 					}
 
 					return CXChildVisitResult.CXChildVisit_Continue;
@@ -248,6 +251,18 @@ namespace Ur
 												result += " = new " + expr.Info.CsType + "()";
 											}
 										}*/
+
+					if (expr.Info.IsArray)
+					{
+						HashSet<string> fields;
+						if (!_structPointerFields.TryGetValue(_structName, out fields))
+						{
+							fields = new HashSet<string>();
+							_structPointerFields[_structName] = fields;
+						}
+
+						fields.Add(fieldName);
+					}
 
 					result += ",";
 					IndentedWriteLine(result);
@@ -367,7 +382,14 @@ namespace Ur
 					res.Expression += ";";
 				}
 
+				var parts = res.Expression.Split(':');
+
 				res.Expression = "pub static mut " + res.Expression;
+
+				if (res.Info.IsArray)
+				{
+					_globalArrays.Add(parts[0]);
+				}
 
 				if (!string.IsNullOrEmpty(res.Expression))
 				{
@@ -575,6 +597,57 @@ namespace Ur
 			return executionExpr;
 		}
 
+		private bool IsArray(string expr)
+		{
+			if (expr.Deparentize().EndsWith("as_mut_ptr()"))
+			{
+				return false;
+			}
+
+			if (_localArrays.Contains(expr))
+			{
+				return true;
+			}
+
+			if (_globalArrays.Contains(expr))
+			{
+				return true;
+			}
+
+			if (expr.Contains("."))
+			{
+				var parts = expr.Split('.');
+
+				var cn = parts[0];
+
+				if (cn.StartsWith("(*"))
+				{
+					cn = cn.Substring(2);
+				}
+
+				if (cn.EndsWith(")"))
+				{
+					cn = cn.Substring(0, cn.Length - 1);
+				}
+
+				string type;
+				if (_localVariables.TryGetValue(cn, out type))
+				{
+					if (type.StartsWith("*mut "))
+					{
+						type = type.Substring(5).Trim();
+					}
+
+					if (_structPointerFields.ContainsKey(type) && _structPointerFields[type].Contains(parts[1]))
+					{
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
 		private string InternalProcess(CursorInfo info)
 		{
 			switch (info.Kind)
@@ -751,14 +824,6 @@ namespace Ur
 							b.Expression = "std::ptr::null_mut()";
 						}
 
-						if (_functionName == "stbi__start_callbacks")
-
-
-						if (a.Info.IsPointer && b.Info.IsPointer && type == BinaryOperatorKind.Assign)
-						{
-							// b.Expression += ".as_mut_ptr()";
-						}
-
 						if (a.Info.IsPointer && b.Info.IsPointer && type == BinaryOperatorKind.Sub)
 						{
 							// b.Expression += ".as_mut_ptr()";
@@ -855,11 +920,6 @@ namespace Ur
 						for (var i = 1; i < size; ++i)
 						{
 							var argExpr = ProcessChildByIndex(info.Cursor, i);
-
-							if (argExpr.Info.IsPointer && argExpr.Expression.IsWord() && !_localPointers.Contains(argExpr.Expression))
-							{
-								argExpr.Expression += ".as_mut_ptr()";
-							}
 
 							if (argExpr.Info.Cursor.GetChildrenCount() > 0)
 							{
@@ -1265,8 +1325,6 @@ namespace Ur
 							expr = name + ":[" + info.Type.GetPointeeType().ToCSharpTypeString() + ";" + info.Type.GetArraySize() + "]";
 						}
 
-
-
 						if (rvalue != null && !string.IsNullOrEmpty(rvalue.Expression))
 						{
 							if (!info.IsPointer && !info.IsArray)
@@ -1325,8 +1383,6 @@ namespace Ur
 						else if (!info.IsPointer)
 						{
 							expr += " = std::mem::uninitialized()";
-
-							_localStructs.Add(name);
 						}
 
 						if (_state == State.Functions)
@@ -1336,10 +1392,12 @@ namespace Ur
 
 						expr = expr + ";";
 
-						if (info.IsPointer && !info.IsPrimitiveNumericType && !info.IsArray)
+						if (info.IsArray)
 						{
-							_localPointers.Add(name);
+							_localArrays.Add(name);
 						}
+
+						_localVariables[name] = info.RustType;
 
 						return expr;
 					}
@@ -1381,7 +1439,7 @@ namespace Ur
 						var var = ProcessChildByIndex(info.Cursor, 0);
 						var expr = ProcessChildByIndex(info.Cursor, 1);
 
-						if (_localPointers.Contains(var.Expression))
+						if (!IsArray(var.Expression))
 						{
 							return "*" + var.Expression + ".offset((" + expr.Expression + ") as isize)";
 						}
@@ -1444,6 +1502,11 @@ namespace Ur
 
 						var expr = child.Expression;
 
+/*						if (info.IsPointer && IsArray(expr))
+						{
+							expr += ".as_mut_ptr()";
+						}*/
+
 						if (info.RustType != child.Info.RustType)
 						{
 							expr = expr.ApplyCast(info.RustType);
@@ -1473,11 +1536,9 @@ namespace Ur
 							expr.Expression = "std::ptr::null_mut()";
 						}
 
-						if (info.IsPointer && 
-							(expr.Info.Kind == CXCursorKind.CXCursor_DeclRefExpr || expr.Info.Kind == CXCursorKind.CXCursor_MemberRefExpr) && 
-							expr.Info.IsArray && !_localPointers.Contains(expr.Expression))
+						if (info.IsPointer && IsArray(expr.Expression))
 						{
-//							expr.Expression += ".as_mut_ptr()";
+							expr.Expression += ".as_mut_ptr()";
 						}
 
 						if (info.IsPrimitiveNumericType && expr.Info.IsPrimitiveNumericType &&
@@ -1608,16 +1669,8 @@ namespace Ur
 
 			var info = _functionInfos[functionName];
 
-			_localStructs.Clear();
-			_localPointers.Clear();
-
-			foreach(var pair in info.Arguments)
-			{
-				if (pair.Value.Contains("*"))
-				{
-					_localPointers.Add(pair.Key);
-				}
-			}
+			_localVariables.Clear();
+			_localArrays.Clear();
 
 			IndentedWrite("pub unsafe fn ");
 
@@ -1625,7 +1678,6 @@ namespace Ur
 			Write("(");
 
 			_items.Clear();
-
 
 			var numArgTypes = clang.getNumArgTypes(functionType);
 
@@ -1672,6 +1724,7 @@ namespace Ur
 			sb.Append(":");
 			sb.Append(typeName);
 
+			_localVariables[name] = typeName;
 
 			_items.Add(sb.ToString());
 
