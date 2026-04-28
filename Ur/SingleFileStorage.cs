@@ -32,7 +32,7 @@ namespace Ur
 			}
 		}
 
-		public void Create(ItemType entity)
+		public override void Create(ItemType entity)
 		{
 			var key = GetKey(entity);
 			if (GetByKey(key) != null)

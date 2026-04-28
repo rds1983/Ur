@@ -116,6 +116,8 @@ namespace Ur
 			RemoveFromCache(key);
 		}
 
+		public abstract void Create(ItemType entity);
+
 		public abstract void SaveAll();
 
 		public IEnumerator<ItemType> GetEnumerator() => _cache.Values.GetEnumerator();
