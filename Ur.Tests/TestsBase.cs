@@ -18,7 +18,10 @@ namespace Ur.Tests
 			UrContext.UnregisterAll();
 
 			// Delete data
-			Directory.Delete(Utility.DataFolder, true);
+			if (Directory.Exists(Utility.DataFolder))
+			{
+				Directory.Delete(Utility.DataFolder, true);
+			}
 		}
 	}
 }

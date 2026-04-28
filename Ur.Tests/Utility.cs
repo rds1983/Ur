@@ -8,10 +8,12 @@ namespace Ur.Tests
 	{
 		public const string EmployeesFolderName = "employees";
 		public const string EmployeesFileName = "employees.json";
+		public const string JobsFolderName = "jobs";
 		public const string JobsFileName = "jobs.json";
 
 		public static string EmployeesFolder => Path.Combine(DataFolder, EmployeesFolderName);
 		public static string EmployeesFile => Path.Combine(DataFolder, EmployeesFileName);
+		public static string JobsFolder => Path.Combine(DataFolder, JobsFolderName);
 		public static string JobsFile => Path.Combine(DataFolder, JobsFileName);
 
 		public static string DataFolder => Path.Combine(ExecutingAssemblyFolder, "data");
