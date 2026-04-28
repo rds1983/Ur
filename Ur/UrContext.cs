@@ -39,6 +39,8 @@ namespace Ur
 			_storages.Remove(storage);
 		}
 
+		public static void UnregisterAll() => _storages.Clear();
+
 		public static void Load(string folder)
 		{
 			if (string.IsNullOrEmpty(folder))
