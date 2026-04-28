@@ -1,11 +1,8 @@
-﻿using System;
-
-namespace Ur
+﻿namespace Ur
 {
-	public class SingleFileStorageString<ItemType> : SingleFileStorage<string, ItemType> where ItemType : class
+	public class SingleFileStorageString<ItemType> : SingleFileStorage<string, ItemType> where ItemType : class, IHasId<string>, new()
 	{
-		public SingleFileStorageString(Func<ItemType, string> keyGetter, string subFolderName, bool ignoreCase = true) :
-			base(keyGetter, subFolderName, ignoreCase ? (key => key.ToLower()) : null)
+		public SingleFileStorageString(string subFolderName, bool ignoreCase = true) : base(subFolderName, ignoreCase ? (key => key.ToLower()) : null)
 		{
 		}
 	}

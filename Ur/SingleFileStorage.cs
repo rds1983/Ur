@@ -3,13 +3,13 @@ using System;
 
 namespace Ur
 {
-	public class SingleFileStorage<KeyType, ItemType> : GenericBaseStorage<KeyType, ItemType> where ItemType : class
+	public class SingleFileStorage<KeyType, ItemType> : GenericBaseStorage<KeyType, ItemType> where ItemType : class, IHasId<KeyType>, new()
 	{
 		public string FileName { get; private set; }
 
 		public override string Name => FileName;
 
-		public SingleFileStorage(Func<ItemType, KeyType> keyGetter, string fileName, Func<KeyType, KeyType> keyConverter = null) : base(keyGetter, keyConverter)
+		public SingleFileStorage(string fileName, Func<KeyType, KeyType> keyConverter = null) : base(keyConverter)
 		{
 			FileName = fileName;
 		}
@@ -53,7 +53,7 @@ namespace Ur
 			var all = All;
 			try
 			{
-				foreach(var entity in all)
+				foreach (var entity in all)
 				{
 					var asSE = entity as ISerializationEvents;
 					if (asSE != null)

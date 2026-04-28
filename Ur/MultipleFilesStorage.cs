@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace Ur
 {
-	public class MultipleFilesStorage<ItemType> : GenericBaseStorage<string, ItemType> where ItemType : class
+	public class MultipleFilesStorage<ItemType> : GenericBaseStorage<string, ItemType> where ItemType : class, IHasId<string>, new()
 	{
 		private string SubfolderName { get; set; }
 
@@ -14,8 +14,7 @@ namespace Ur
 
 		public string Folder => Path.Combine(UrContext.Folder, SubfolderName);
 
-		public MultipleFilesStorage(Func<ItemType, string> keyGetter, string subFolderName, bool ignoreCase = true) :
-			base(keyGetter, ignoreCase ? (key => key.ToLower()) : null)
+		public MultipleFilesStorage(string subFolderName, bool ignoreCase = true) : base(ignoreCase ? (key => key.ToLower()) : null)
 		{
 			SubfolderName = subFolderName;
 		}

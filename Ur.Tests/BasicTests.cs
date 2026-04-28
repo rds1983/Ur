@@ -53,7 +53,7 @@ namespace Ur.Tests
 		public void BasicEmployeeMultipleFilesStorageTest()
 		{
 			// Create and register the storage
-			var storage = new MultipleFilesStorage<BasicEmployee>(e => e.Id, Utility.EmployeesFolderName);
+			var storage = new MultipleFilesStorage<BasicEmployee>(Utility.EmployeesFolderName);
 
 			BasicEmployeeTest(storage);
 		}
@@ -62,7 +62,7 @@ namespace Ur.Tests
 		public void BasicEmployeeSingleFileStorageTest()
 		{
 			// Create and register the storage
-			var storage = new SingleFileStorageString<BasicEmployee>(e => e.Id, Utility.EmployeesFileName);
+			var storage = new SingleFileStorageString<BasicEmployee>(Utility.EmployeesFileName);
 
 			BasicEmployeeTest(storage);
 		}

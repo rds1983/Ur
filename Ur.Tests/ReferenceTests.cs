@@ -12,8 +12,8 @@ namespace Ur.Tests
 			// It doesn't actually test anything.
 
 			// Create and register the storage
-			var storageEmployees = new MultipleFilesStorage<Employee>(e => e.Id, Utility.EmployeesFolderName);
-			var storageJobs = new SingleFileStorageString<Job>(j => j.Id, Utility.JobsFileName);
+			var storageEmployees = new MultipleFilesStorage<Employee>(Utility.EmployeesFolderName);
+			var storageJobs = new SingleFileStorageString<Job>(Utility.JobsFileName);
 
 			UrContext.Register(storageEmployees);
 			UrContext.Register(storageJobs);
@@ -59,8 +59,6 @@ namespace Ur.Tests
 
 			storageJobs.SaveAll();
 			storageEmployees.SaveAll();
-
-			var k = 5;
 		}
 	}
 }

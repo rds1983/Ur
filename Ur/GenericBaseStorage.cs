@@ -6,10 +6,9 @@ using System.Linq;
 
 namespace Ur
 {
-	public abstract class GenericBaseStorage<KeyType, ItemType> : BaseStorage, IEnumerable<ItemType> where ItemType : class
+	public abstract class GenericBaseStorage<KeyType, ItemType> : BaseStorage, IEnumerable<ItemType> where ItemType : class, IHasId<KeyType>, new()
 	{
 		private readonly Dictionary<KeyType, ItemType> _cache = new Dictionary<KeyType, ItemType>();
-		private readonly Func<ItemType, KeyType> _keyGetter;
 		private readonly Func<KeyType, KeyType> _keyConverter;
 
 		public int Count => _cache.Count;
@@ -18,9 +17,8 @@ namespace Ur
 
 		public IReadOnlyDictionary<KeyType, ItemType> Cache => _cache;
 
-		internal GenericBaseStorage(Func<ItemType, KeyType> keyGetter, Func<KeyType, KeyType> keyConverter = null)
+		protected GenericBaseStorage(Func<KeyType, KeyType> keyConverter = null)
 		{
-			_keyGetter = keyGetter ?? throw new ArgumentNullException(nameof(keyGetter));
 			_keyConverter = keyConverter;
 		}
 
@@ -28,7 +26,7 @@ namespace Ur
 
 		protected KeyType GetKey(ItemType entity, bool convert = true)
 		{
-			var key = _keyGetter(entity);
+			var key = entity.Id;
 
 			if (convert)
 			{
@@ -112,7 +110,7 @@ namespace Ur
 
 		public virtual void Remove(ItemType item)
 		{
-			var key = _keyGetter(item);
+			var key = item.Id;
 			RemoveFromCache(key);
 		}
 
