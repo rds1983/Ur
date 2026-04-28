@@ -16,10 +16,10 @@ jobs:
       with:
         dotnet-version: '10.0.x'
     - name: Build Ur
-      run: dotnet build Ur.sln --configuration Release
+      run: dotnet build Ur.slnx --configuration Release
     - name: Test
-      run: dotnet test Ur.sln
+      run: dotnet test Ur.slnx
     - name: Install NuGet
       uses: NuGet/setup-nuget@v1
     - name: Publish Ur to NuGet
-      run: nuget.exe push Ur\bin\MonoGame\Release\Ur.*.nupkg ${{secrets.NUGET_APIKEY}} -Source https://api.nuget.org/v3/index.json
+      run: nuget.exe push Ur\bin\Release\Ur.*.nupkg ${{secrets.NUGET_APIKEY}} -Source https://api.nuget.org/v3/index.json
