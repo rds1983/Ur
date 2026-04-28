@@ -3,6 +3,7 @@ name: Build & Publish Beta
 on:
     push:
         paths:
+            - '.github/**'
             - 'Ur/**'
             - 'Ur.Tests/**'
     workflow_dispatch:
@@ -18,7 +19,7 @@ jobs:
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
     - name: Build Ur
       run: dotnet build Ur.slnx --configuration Release
     - name: Test
