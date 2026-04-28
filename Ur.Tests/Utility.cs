@@ -2,17 +2,21 @@
 using System.IO;
 using System.Reflection;
 
-namespace Ur
+namespace Ur.Tests
 {
 	internal static class Utility
 	{
 		public const string EmployeesFolderName = "employees";
 		public const string EmployeesFileName = "employees.json";
+		public const string JobsFileName = "jobs.json";
 
-		public static string EmployeesFolder => Path.Combine(ExecutingAssemblyDirectory, EmployeesFolderName);
-		public static string EmployeesFile => Path.Combine(ExecutingAssemblyDirectory, EmployeesFileName);
+		public static string EmployeesFolder => Path.Combine(DataFolder, EmployeesFolderName);
+		public static string EmployeesFile => Path.Combine(DataFolder, EmployeesFileName);
+		public static string JobsFile => Path.Combine(DataFolder, JobsFileName);
 
-		public static string ExecutingAssemblyDirectory
+		public static string DataFolder => Path.Combine(ExecutingAssemblyFolder, "data");
+
+		public static string ExecutingAssemblyFolder
 		{
 			get
 			{
@@ -21,6 +25,11 @@ namespace Ur
 				var path = Uri.UnescapeDataString(uri.Path);
 				return Path.GetDirectoryName(path);
 			}
+		}
+
+		public static void LoadData()
+		{
+			UrContext.Load(DataFolder);
 		}
 	}
 }

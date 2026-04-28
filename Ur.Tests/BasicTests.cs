@@ -1,15 +1,14 @@
-using System.IO;
-using Ur.Data;
+using Ur.Tests.Data;
 using Xunit;
 
 namespace Ur.Tests
 {
-	public class BasicTests
+	public class BasicTests: TestsBase
 	{
 		private void BasicEmployeeTest(GenericBaseStorage<string, BasicEmployee> storage)
 		{
 			UrContext.Register(storage);
-			UrContext.Load(Utility.ExecutingAssemblyDirectory);
+			Utility.LoadData();
 
 			// Create some employees and save them
 			var employee1 = new BasicEmployee
@@ -35,7 +34,7 @@ namespace Ur.Tests
 			Assert.Equal(0, storage.Count);
 
 			// Load it again
-			UrContext.Load(Utility.ExecutingAssemblyDirectory);
+			Utility.LoadData();
 
 			// Validate the data
 			Assert.Equal(2, storage.Count);
@@ -57,9 +56,6 @@ namespace Ur.Tests
 			var storage = new MultipleFilesStorage<BasicEmployee>(e => e.Id, Utility.EmployeesFolderName);
 
 			BasicEmployeeTest(storage);
-
-			// Remove the created folder
-			Directory.Delete(Utility.EmployeesFolder, true);
 		}
 
 		[Fact]
@@ -69,9 +65,6 @@ namespace Ur.Tests
 			var storage = new SingleFileStorageString<BasicEmployee>(e => e.Id, Utility.EmployeesFileName);
 
 			BasicEmployeeTest(storage);
-
-			// Remove the created file
-			File.Delete(Utility.EmployeesFile);
 		}
 	}
 }

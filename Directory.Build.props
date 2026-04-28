@@ -4,7 +4,6 @@
     <Product>Ur</Product>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/rds1983/Ur</PackageProjectUrl>
-    <RootNamespace>Ur</RootNamespace>
     <Description>C# Json Serialization Library Build On Top of System.Text.Json</Description>
     <VersionPrefix>0.4.0</VersionPrefix>
     <TargetFramework>net8.0</TargetFramework>
