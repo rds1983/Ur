@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Ur
 {
@@ -43,7 +45,7 @@ namespace Ur
 		{
 			var path = BuildPath(entity);
 			var folder = Path.GetDirectoryName(path);
-			EnsureFolder(folder);
+			Utility.EnsureFolder(folder);
 
 			var asSE = entity as ISerializationEvents;
 			try
@@ -148,5 +150,31 @@ namespace Ur
 				InternalSave(item);
 			}
 		}
+
+		private class CustomJsonConverter : JsonConverter<ItemType>
+		{
+			public static readonly CustomJsonConverter Instance = new CustomJsonConverter();
+
+			private CustomJsonConverter()
+			{
+			}
+
+			public override ItemType Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+			{
+				var id = reader.GetString();
+
+				return new ItemType
+				{
+					Id = id
+				};
+			}
+
+			public override void Write(Utf8JsonWriter writer, ItemType value, JsonSerializerOptions options)
+			{
+				writer.WriteStringValue(value.Id);
+			}
+		}
+
+		protected override JsonConverter CreateJsonConverter() => CustomJsonConverter.Instance;
 	}
 }

@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace Ur
@@ -10,6 +9,8 @@ namespace Ur
 	{
 		private readonly Dictionary<KeyType, ItemType> _cache = new Dictionary<KeyType, ItemType>();
 		private readonly Func<KeyType, KeyType> _keyConverter;
+
+		public override Type StoredType => typeof(ItemType);
 
 		public int Count => _cache.Count;
 
@@ -93,15 +94,6 @@ namespace Ur
 		internal override void Clear() => ClearCache();
 
 		public virtual void ClearCache() => _cache.Clear();
-
-		protected void EnsureFolder(string folderPath)
-		{
-			if (!Directory.Exists(folderPath))
-			{
-				Log($"Creating folder '{folderPath}'");
-				Directory.CreateDirectory(folderPath);
-			}
-		}
 
 		protected void RemoveFromCache(KeyType key)
 		{

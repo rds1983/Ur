@@ -46,7 +46,7 @@ namespace Ur
 
 		public override void SaveAll()
 		{
-			EnsureFolder(UrContext.Folder);
+			Utility.EnsureFolder(UrContext.Folder);
 
 			var path = Path.ChangeExtension(Path.Combine(UrContext.Folder, FileName), "json");
 

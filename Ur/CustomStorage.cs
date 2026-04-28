@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace Ur
 {
@@ -11,6 +12,8 @@ namespace Ur
 		public string Filename { get; private set; }
 
 		public override string Name => Filename;
+
+		public override Type StoredType => typeof(T);
 
 		public T Item => _item;
 

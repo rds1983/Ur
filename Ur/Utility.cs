@@ -75,5 +75,14 @@ namespace Ur
 			var data = File.ReadAllText(path);
 			return JsonSerializer.Deserialize<T>(data, options);
 		}
+
+		public static void EnsureFolder(string folderPath)
+		{
+			if (!Directory.Exists(folderPath))
+			{
+				UrContext.Log($"Creating folder '{folderPath}'");
+				Directory.CreateDirectory(folderPath);
+			}
+		}
 	}
 }

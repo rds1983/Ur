@@ -10,12 +10,14 @@ namespace Ur
 		private static readonly List<BaseStorage> _storages = new List<BaseStorage>();
 
 		public static Action<string> Logger { get; set; } = Console.WriteLine;
-		
+
 		public static Func<JsonSerializerOptions> BaseOptionsCreator { get; set; } = CreateDefaultOptions;
 
 		public static string Folder => _folder;
 
 		internal static void Log(string message) => Logger?.Invoke(message);
+
+		public static IReadOnlyList<BaseStorage> Storages => _storages;
 
 		public static void Register(BaseStorage storage)
 		{
@@ -75,5 +77,20 @@ namespace Ur
 		}
 
 		public static JsonSerializerOptions CreateDefaultOptions() => Utility.CreateOptions();
+
+		public static BaseStorage GetStorageByType(Type type)
+		{
+			foreach (var storage in _storages)
+			{
+				if (storage.StoredType == type)
+				{
+					return storage;
+				}
+			}
+
+			return null;
+		}
+
+		public static BaseStorage GetStorageByType<T>() => GetStorageByType(typeof(T));
 	}
 }
