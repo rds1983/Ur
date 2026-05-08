@@ -1,9 +1,5 @@
 # Ur
 
-C# Json Serialization Library Build On Top of System.Text.Json
-
-## Introduction
-
 Ur is a lightweight persistence library for .NET that serializes objects that implement `IHasId<KeyType>` to JSON files. It offers three storage strategies:
 
 - **MultipleFilesStorage** — each object is serialized to its own file, identified by its `Id`.

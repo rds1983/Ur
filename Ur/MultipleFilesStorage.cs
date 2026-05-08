@@ -151,30 +151,6 @@ namespace Ur
 			}
 		}
 
-		private class CustomJsonConverter : JsonConverter<ItemType>
-		{
-			public static readonly CustomJsonConverter Instance = new CustomJsonConverter();
-
-			private CustomJsonConverter()
-			{
-			}
-
-			public override ItemType Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-			{
-				var id = reader.GetString();
-
-				return new ItemType
-				{
-					Id = id
-				};
-			}
-
-			public override void Write(Utf8JsonWriter writer, ItemType value, JsonSerializerOptions options)
-			{
-				writer.WriteStringValue(value.Id);
-			}
-		}
-
-		protected override JsonConverter CreateJsonConverter() => CustomJsonConverter.Instance;
+		protected override JsonConverter CreateJsonConverter() => UrConvertersFactory.GetConverter<ItemType>();
 	}
 }
